@@ -251,7 +251,11 @@ class JournalEntry {
 
 
 
-/*「finalを使うかどうかは、そのフィールドが『オブジェクトのライフサイクル内で不変か』によります。税率やNCI比率は、確かに時間とともに変化しますが、ある特定の連結決算（例えば2026年3月期）の計算をするときは固定値です。なので、その決算用の計算機インスタンスを作る際にfinalで固定するのは、一つの合理的な設計です。」　普通のB/Sとかだとfinal使うのはダメ*/
+/*「finalを使うかどうかは、そのフィールドが『オブジェクトのライフサイクル内で不変か』によります。
+税率やNCI比率は、確かに時間とともに変化しますが、ある特定の連結決算（例えば2026年3月期）の計算をするときは固定値です。
+なので、その決算用の計算機インスタンスを作る際にfinalで固定するのは、一つの合理的な設計です。」　
+
+普通のB/Sとかだとfinal使うのはダメ*/
 
 
 
@@ -290,8 +294,16 @@ java
 
 /*
 日本語プロフィール
-会計の専門知識（全経上級合格）を基に、連結会計システムの実装に取り組んでいます。連結決算の核心的論点（内部取引未実現利益の消去・税効果会計）を、金融システムレベルの正確性（BigDecimal）と保守性を意識したJava設計で実装することに焦点を当て、「会計ロジックを堅牢なコードに落とし込む」ことを情熱としています。
+会計の専門知識（全経上級合格）を基に、連結会計システムの実装に取り組んでいます。
+連結決算の核心的論点（内部取引未実現利益の消去・税効果会計）を、
+金融システムレベルの正確性（BigDecimal）と
+保守性を意識したJava設計で実装することに焦点を当て、
+「会計ロジックを堅牢なコードに落とし込む」ことを情熱としています。
 
 English Profile
-Accounting specialist (全経上級合格) building consolidation systems in Java. I implement core topics like intercompany profit elimination & deferred tax, focusing on production-grade precision (BigDecimal) and clean design. Passionate about bridging accounting logic and robust code.
+Accounting specialist (全経上級合格) building consolidation systems in Java. 
+I implement core topics like intercompany profit elimination & deferred tax, 
+focusing on production-grade precision (BigDecimal) and clean design.
+Passionate about bridging accounting logic and robust code.
 */
+
