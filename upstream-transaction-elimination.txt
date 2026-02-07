@@ -1,0 +1,297 @@
+【upstream-transaction-elimination 】
+
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.List;
+
+/*
+浮動小数点は禁止のためdoubleは論外
+丸め処理　四捨五入
+*/
+
+
+/*
+問題　
+
+売上原価100
+商品100
+繰延税金資産40
+法人税等調整額40
+少数株主損益12
+少数株主持分12
+子会社が親会社に商品を売った　親会社は子会社の株を20％持っている　
+法人税の実効税率は40％と仮定　
+
+アップストリームのため
+未実現利益は少数株主持分にも負担
+非支配株主持分　 nciRatio　のこと
+
+今は名前が変わって
+少数株主損益　→　非支配株主に帰属する当期純利益
+小数株主持分　→　非支配株主持分
+*/
+
+
+/*
+繰延税金資産　法人税の前払額　　基本はこれ
+繰延税金負債　法人税の未払額　　圧縮記帳かその他有価証券評価差額金で出てくる
+圧縮記帳は会計上は費用ではなく
+税務上損金算入されるため
+将来加算一時差異が発生
+
+会計上と税務上
+連結上と個別上の差異が生じたとき
+一時差異を認識
+別表4の説明はここでは省く
+*/
+
+
+
+/**
+ * 連結会計 - 上流取引（子会社→親会社）の未実現利益消去シミュレーター
+ * 
+ * 前提条件：
+ * - 子会社が親会社に商品を販売：売価 200円、原価 100円 → 未実現利益 100円
+ * - 親会社は子会社の株式を20%保有
+ * - 実効税率：40%
+ */
+
+public class UpstreamTransactionElimination {
+
+    public static void main(String[] args) {
+        System.out.println("＝＝＝ 連結会計 未実現利益消去シミュレーション ＝＝＝\n");
+        
+        // 前提条件の設定
+        BigDecimal unrealizedProfit = new BigDecimal("100");  // 未実現利益 100円
+        BigDecimal taxRate = new BigDecimal("0.4");          // 実効税率 40%
+        BigDecimal nciRatio = new BigDecimal("0.2");         // 非支配株主持分比率 20%
+        
+        System.out.println("【前提条件】");
+        System.out.println("1. 子会社 → 親会社への商品販売");
+        System.out.println("2. 未実現利益: " + unrealizedProfit + "円");
+        System.out.println("3. 実効税率: " + taxRate.multiply(new BigDecimal("100")) + "%");
+        System.out.println("4. 非支配株主持分比率: " + nciRatio.multiply(new BigDecimal("100")) + "%\n");
+        
+        // 計算の実行
+        EliminationCalculator calculator = new EliminationCalculator(taxRate, nciRatio);
+        EliminationResult result = calculator.calculate(unrealizedProfit);
+        
+        // 結果の表示
+        displayAccountingEntries(result);
+        displayConsolidatedImpact(result);
+    }
+    
+    /**
+     * 仕訳を表示する
+     */
+    private static void displayAccountingEntries(EliminationResult result) {
+        System.out.println("【連結修正仕訳】");
+        System.out.println("（借）売上原価　　　　　　　" + result.getUnrealizedProfit() + "円");
+        System.out.println("　　（貸）商品　　　　　　　" + result.getUnrealizedProfit() + "円");
+        System.out.println();
+        System.out.println("（借）繰延税金資産　　　　　" + result.getDeferredTaxAsset() + "円");
+        System.out.println("　　（貸）法人税等調整額　　　" + result.getDeferredTaxAsset() + "円");
+        System.out.println();
+        System.out.println("（借）少数株主損益　　　　　" + result.getNciProfit() + "円");
+        System.out.println("　　（貸）少数株主持分　　　　" + result.getNciProfit() + "円");
+        System.out.println();
+    }
+    
+    /**
+     * 連結財務諸表への影響を表示する
+     */
+    private static void displayConsolidatedImpact(EliminationResult result) {
+        System.out.println("【連結財務諸表への影響】");
+        System.out.println("1. 連結損益計算書 (P/L):");
+        System.out.println("   - 売上原価増加: " + result.getUnrealizedProfit() + "円");
+        System.out.println("   - 税金費用減少: " + result.getDeferredTaxAsset() + "円");
+        System.out.println("   - 少数株主損益増加: " + result.getNciProfit() + "円");
+        System.out.println("   - 親会社株主に帰属する当期純利益減少: " + 
+                         result.getUnrealizedProfit()
+                               .subtract(result.getDeferredTaxAsset())
+                               .subtract(result.getNciProfit()) + "円");
+        System.out.println();
+        System.out.println("2. 連結貸借対照表 (B/S):");
+        System.out.println("   - 商品減少: " + result.getUnrealizedProfit() + "円");
+        System.out.println("   - 繰延税金資産増加: " + result.getDeferredTaxAsset() + "円");
+        System.out.println("   - 少数株主持分減少: " + result.getNciProfit() + "円");
+        System.out.println("   - 親会社株主に帰属する純資産減少: " + 
+                         result.getUnrealizedProfit()
+                               .subtract(result.getDeferredTaxAsset())
+                               .subtract(result.getNciProfit()) + "円");
+    }
+}
+
+/**
+ * 未実現利益消去の計算ロジック
+ */
+class EliminationCalculator {
+    private final BigDecimal taxRate;
+    private final BigDecimal nciRatio;
+    
+    /**
+     * @param taxRate 実効税率（例: 0.4 = 40%）
+     * @param nciRatio 非支配株主持分比率（例: 0.2 = 20%）
+     */
+    public EliminationCalculator(BigDecimal taxRate, BigDecimal nciRatio) {
+        validateParameter(taxRate, "taxRate");
+        validateParameter(nciRatio, "nciRatio");
+        this.taxRate = taxRate;
+        this.nciRatio = nciRatio;
+    }
+    
+    private void validateParameter(BigDecimal value, String paramName) {
+        if (value == null) {
+            throw new IllegalArgumentException(paramName + " must not be null");
+        }
+        if (value.compareTo(BigDecimal.ZERO) < 0 || value.compareTo(BigDecimal.ONE) > 0) {
+            throw new IllegalArgumentException(
+                paramName + " must be between 0 and 1 (0% to 100%)");
+        }
+    }
+    
+    /**
+     * 未実現利益消去の計算を実行
+     * 
+     * @param unrealizedProfit 消去対象の未実現利益
+     * @return 計算結果
+     */
+    public EliminationResult calculate(BigDecimal unrealizedProfit) {
+        if (unrealizedProfit == null || unrealizedProfit.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException(
+                "unrealizedProfit must be non-null and non-negative");
+        }
+        
+        // 1. 繰延税金資産 = 未実現利益 × 実効税率
+        BigDecimal deferredTaxAsset = unrealizedProfit.multiply(taxRate)
+            .setScale(0, RoundingMode.HALF_UP);
+        
+        // 2. 税引き後の未実現利益
+        BigDecimal afterTaxProfit = unrealizedProfit.subtract(deferredTaxAsset);
+        
+        // 3. 少数株主損益 = 税引き後利益 × NCI比率
+        BigDecimal nciProfit = afterTaxProfit.multiply(nciRatio)
+            .setScale(0, RoundingMode.HALF_UP);
+        
+        return new EliminationResult(unrealizedProfit, deferredTaxAsset, nciProfit);
+    }
+}
+
+/**
+ * 計算結果を保持するイミュータブルクラス
+ */
+class EliminationResult {
+    private final BigDecimal unrealizedProfit;  // 未実現利益
+    private final BigDecimal deferredTaxAsset;  // 繰延税金資産
+    private final BigDecimal nciProfit;         // 少数株主損益
+    
+    public EliminationResult(BigDecimal unrealizedProfit, 
+                           BigDecimal deferredTaxAsset, 
+                           BigDecimal nciProfit) {
+        this.unrealizedProfit = unrealizedProfit;
+        this.deferredTaxAsset = deferredTaxAsset;
+        this.nciProfit = nciProfit;
+    }
+    
+    public BigDecimal getUnrealizedProfit() { return unrealizedProfit; }
+    public BigDecimal getDeferredTaxAsset() { return deferredTaxAsset; }
+    public BigDecimal getNciProfit() { return nciProfit; }
+    
+    /**
+     * 仕訳エントリーのリストを取得
+     */
+    public List<JournalEntry> getJournalEntries() {
+        List<JournalEntry> entries = new ArrayList<>();
+        
+        // 未実現利益消去仕訳
+        entries.add(new JournalEntry(
+            "売上原価", "商品", unrealizedProfit
+        ));
+        
+        // 税効果会計仕訳
+        entries.add(new JournalEntry(
+            "繰延税金資産", "法人税等調整額", deferredTaxAsset
+        ));
+        
+        // 少数株主仕訳
+        entries.add(new JournalEntry(
+            "少数株主損益", "少数株主持分", nciProfit
+        ));
+        
+        return entries;
+    }
+}
+
+/**
+ * 仕訳エントリーを表すクラス
+ */
+class JournalEntry {
+    private final String debitAccount;   // 借方科目
+    private final String creditAccount;  // 貸方科目
+    private final BigDecimal amount;     // 金額
+    
+    public JournalEntry(String debitAccount, String creditAccount, BigDecimal amount) {
+        this.debitAccount = debitAccount;
+        this.creditAccount = creditAccount;
+        this.amount = amount;
+    }
+    
+    @Override
+    public String toString() {
+        return String.format("（借）%-15s %s円\n　　（貸）%-15s %s円",
+            debitAccount, amount.toPlainString(),
+            creditAccount, amount.toPlainString());
+    }
+}
+
+
+/*仕訳データをJournalEntryクラスでカプセル化し、実務的なデータ管理を実現*/
+
+
+
+/*「finalを使うかどうかは、そのフィールドが『オブジェクトのライフサイクル内で不変か』によります。税率やNCI比率は、確かに時間とともに変化しますが、ある特定の連結決算（例えば2026年3月期）の計算をするときは固定値です。なので、その決算用の計算機インスタンスを作る際にfinalで固定するのは、一つの合理的な設計です。」　普通のB/Sとかだとfinal使うのはダメ*/
+
+
+
+
+/*Githubを初めて使うので
+README追加できなかった時のためのメモ書き
+
+README
+
+連結会計
+アップストリーム未実現利益消去シミュレーター
+
+
+このポートフォリオが示す3つの実力
+
+1. 会計知識 × IT実装の橋渡し
+連結会計の核心論点（内部取引未実現利益消去）を正確に実装
+IFRS対応を意識した科目名（非支配株主持分）
+税効果会計（繰延税金資産/負債）の実務的理解
+
+
+2. 金融システム開発のプロ意識
+`BigDecimal`使用**：浮動小数点誤差を排除した正確な金額計算
+`RoundingMode.HALF_UP`**：会計・金融業界標準の四捨五入
+ 堅牢なバリデーション**：不正なパラメータを実行前に検出
+
+
+3. 実務を意識した設計思想
+java
+重要な設計判断：
+`final`を使う理由：連結修正仕訳は「決算ごとの計算結果」であり、
+一度生成されたら変更されない不変オブジェクトとして設計
+一般の仕訳伝票システムとは設計思想が異なる*/
+
+
+
+/*
+日本語プロフィール
+会計の専門知識（全経上級合格）を基に、連結会計システムの実装に取り組んでいます。連結決算の核心的論点（内部取引未実現利益の消去・税効果会計）を、金融システムレベルの正確性（BigDecimal）と保守性を意識したJava設計で実装することに焦点を当て、「会計ロジックを堅牢なコードに落とし込む」ことを情熱としています。
+
+English Profile
+Accounting specialist (全経上級合格) building consolidation systems in Java. I implement core topics like intercompany profit elimination & deferred tax, focusing on production-grade precision (BigDecimal) and clean design. Passionate about bridging accounting logic and robust code.
+*/
