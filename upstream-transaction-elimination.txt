@@ -51,6 +51,7 @@ import java.util.List;
 
 /**
  * 連結会計 - 上流取引（子会社→親会社）の未実現利益消去シミュレーター
+(上流取引とはアップストリームのこと)
  * 
  * 前提条件：
  * - 子会社が親会社に商品を販売：売価 200円、原価 100円 → 未実現利益 100円
@@ -260,36 +261,6 @@ class JournalEntry {
 
 
 
-/*Githubを初めて使うので
-README追加できなかった時のためのメモ書き
-
-README
-
-連結会計
-アップストリーム未実現利益消去シミュレーター
-
-
-このポートフォリオが示す3つの実力
-
-1. 会計知識 × IT実装の橋渡し
-連結会計の核心論点（内部取引未実現利益消去）を正確に実装
-IFRS対応を意識した科目名（非支配株主持分）
-税効果会計（繰延税金資産/負債）の実務的理解
-
-
-2. 金融システム開発のプロ意識
-`BigDecimal`使用**：浮動小数点誤差を排除した正確な金額計算
-`RoundingMode.HALF_UP`**：会計・金融業界標準の四捨五入
- 堅牢なバリデーション**：不正なパラメータを実行前に検出
-
-
-3. 実務を意識した設計思想
-java
-重要な設計判断：
-`final`を使う理由：連結修正仕訳は「決算ごとの計算結果」であり、
-一度生成されたら変更されない不変オブジェクトとして設計
-一般の仕訳伝票システムとは設計思想が異なる*/
-
 
 
 /*
@@ -306,4 +277,5 @@ I implement core topics like intercompany profit elimination & deferred tax,
 focusing on production-grade precision (BigDecimal) and clean design.
 Passionate about bridging accounting logic and robust code.
 */
+
 
